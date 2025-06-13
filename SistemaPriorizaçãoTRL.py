@@ -1,24 +1,29 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import json
-import os
 from typing import Dict, List, Tuple
+import numpy as np
+
+# Configuração da página
+st.set_page_config(
+    page_title="Sistema de Priorização TRL",
+    page_icon="🎯",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 class TRLMatrixSystem:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Sistema de Priorização TRL - Gestão de Projetos")
-        self.root.geometry("1400x900")
-        self.root.configure(bg='#f0f0f0')
-        
-        # Dados dos projetos
-        self.projetos = self.carregar_projetos_iniciais()
-        self.projetos_filtrados = self.projetos.copy()
-        
-        # Configurar interface
-        self.criar_interface()
-        self.atualizar_lista_projetos()
-        
+    def __init__(self):
+        self.inicializar_dados()
+    
+    def inicializar_dados(self):
+        """Inicializa os dados dos projetos"""
+        if 'projetos' not in st.session_state:
+            st.session_state.projetos = self.carregar_projetos_iniciais()
+    
     def carregar_projetos_iniciais(self) -> List[Dict]:
         """Carrega a lista inicial de projetos fornecida"""
         projetos_iniciais = [
@@ -60,168 +65,6 @@ class TRLMatrixSystem:
         ]
         return projetos_iniciais
     
-    def criar_interface(self):
-        """Cria a interface principal do sistema"""
-        # Frame principal
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Configurar grid do root
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-        
-        # Título
-        titulo = ttk.Label(main_frame, text="Sistema de Priorização TRL - Gestão de Projetos", 
-                          font=('Arial', 16, 'bold'))
-        titulo.grid(row=0, column=0, columnspan=2, pady=(0, 20))
-        
-        # Frame esquerdo - Lista de projetos
-        frame_esquerdo = ttk.LabelFrame(main_frame, text="Projetos", padding="10")
-        frame_esquerdo.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 10))
-        frame_esquerdo.columnconfigure(0, weight=1)
-        frame_esquerdo.rowconfigure(1, weight=1)
-        
-        # Botões de ação
-        frame_botoes = ttk.Frame(frame_esquerdo)
-        frame_botoes.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        ttk.Button(frame_botoes, text="Adicionar Projeto", command=self.adicionar_projeto).grid(row=0, column=0, padx=(0, 5))
-        ttk.Button(frame_botoes, text="Editar Projeto", command=self.editar_projeto).grid(row=0, column=1, padx=5)
-        ttk.Button(frame_botoes, text="Excluir Projeto", command=self.excluir_projeto).grid(row=0, column=2, padx=5)
-        ttk.Button(frame_botoes, text="Salvar Dados", command=self.salvar_dados).grid(row=0, column=3, padx=5)
-        ttk.Button(frame_botoes, text="Carregar Dados", command=self.carregar_dados).grid(row=0, column=4, padx=(5, 0))
-        
-        # Lista de projetos (Treeview)
-        self.tree = ttk.Treeview(frame_esquerdo, columns=('TRL', 'Impacto', 'Dificuldade', 'Peso', 'Prioridade'), show='tree headings')
-        self.tree.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Configurar colunas
-        self.tree.heading('#0', text='Projeto')
-        self.tree.heading('TRL', text='TRL')
-        self.tree.heading('Impacto', text='Impacto')
-        self.tree.heading('Dificuldade', text='Dificuldade')
-        self.tree.heading('Peso', text='Peso')
-        self.tree.heading('Prioridade', text='Prioridade')
-        
-        self.tree.column('#0', width=300)
-        self.tree.column('TRL', width=50)
-        self.tree.column('Impacto', width=80)
-        self.tree.column('Dificuldade', width=90)
-        self.tree.column('Peso', width=60)
-        self.tree.column('Prioridade', width=80)
-        
-        # Scrollbar para a lista
-        scrollbar = ttk.Scrollbar(frame_esquerdo, orient=tk.VERTICAL, command=self.tree.yview)
-        scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        
-        # Frame direito - Matriz e filtros
-        frame_direito = ttk.LabelFrame(main_frame, text="Matriz de Priorização", padding="10")
-        frame_direito.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
-        frame_direito.columnconfigure(0, weight=1)
-        frame_direito.rowconfigure(2, weight=1)
-        
-        # Filtros
-        frame_filtros = ttk.LabelFrame(frame_direito, text="Filtros", padding="5")
-        frame_filtros.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        ttk.Label(frame_filtros, text="TRL:").grid(row=0, column=0, padx=(0, 5))
-        self.filtro_trl = ttk.Combobox(frame_filtros, values=['Todos'] + [str(i) for i in range(1, 10)], width=8)
-        self.filtro_trl.set('Todos')
-        self.filtro_trl.grid(row=0, column=1, padx=(0, 10))
-        self.filtro_trl.bind('<<ComboboxSelected>>', self.aplicar_filtros)
-        
-        ttk.Label(frame_filtros, text="Impacto:").grid(row=0, column=2, padx=(0, 5))
-        self.filtro_impacto = ttk.Combobox(frame_filtros, values=['Todos', 'Alto', 'Médio', 'Baixo'], width=10)
-        self.filtro_impacto.set('Todos')
-        self.filtro_impacto.grid(row=0, column=3, padx=(0, 10))
-        self.filtro_impacto.bind('<<ComboboxSelected>>', self.aplicar_filtros)
-        
-        ttk.Button(frame_filtros, text="Limpar Filtros", command=self.limpar_filtros).grid(row=0, column=4)
-        
-        # Matriz visual
-        self.criar_matriz_visual(frame_direito)
-        
-        # Estatísticas
-        self.frame_stats = ttk.LabelFrame(frame_direito, text="Estatísticas", padding="5")
-        self.frame_stats.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
-        self.atualizar_estatisticas()
-    
-    def criar_matriz_visual(self, parent):
-        """Cria a representação visual da matriz de priorização"""
-        frame_matriz = ttk.Frame(parent)
-        frame_matriz.grid(row=2, column=0, pady=10)
-        
-        # Título da matriz
-        ttk.Label(frame_matriz, text="Matriz de Priorização TRL", 
-                 font=('Arial', 12, 'bold')).grid(row=0, column=0, columnspan=4, pady=(0, 10))
-        
-        # Headers
-        ttk.Label(frame_matriz, text="DIFICULDADE →").grid(row=1, column=0, columnspan=4)
-        ttk.Label(frame_matriz, text="IMPACTO ↓", font=('Arial', 10, 'bold')).grid(row=2, column=0, sticky=tk.W)
-        
-        # Cabeçalhos das colunas
-        cols = ["", "FÁCIL", "MODERADA", "DIFÍCIL"]
-        for i, col in enumerate(cols):
-            label = ttk.Label(frame_matriz, text=col, font=('Arial', 9, 'bold'))
-            label.grid(row=3, column=i, padx=5, pady=2)
-        
-        # Linhas da matriz
-        rows = ["ALTO", "MÉDIO", "BAIXO"]
-        priorities = [
-            [1, 2, 3],  # Alto impacto
-            [4, 5, 6],  # Médio impacto
-            [7, 8, 9]   # Baixo impacto
-        ]
-        
-        colors = {
-            1: '#e74c3c', 2: '#e74c3c', 3: '#f39c12',  # Vermelho, Vermelho, Laranja
-            4: '#f39c12', 5: '#f1c40f', 6: '#95a5a6',  # Laranja, Amarelo, Cinza
-            7: '#f1c40f', 8: '#95a5a6', 9: '#95a5a6'   # Amarelo, Cinza, Cinza
-        }
-        
-        self.matriz_labels = {}
-        for i, row in enumerate(rows):
-            # Label da linha
-            ttk.Label(frame_matriz, text=row, font=('Arial', 9, 'bold')).grid(row=4+i, column=0, padx=5, pady=2, sticky=tk.W)
-            
-            # Células da matriz
-            for j in range(3):
-                priority = priorities[i][j]
-                frame_cell = tk.Frame(frame_matriz, bg=colors[priority], width=80, height=50)
-                frame_cell.grid(row=4+i, column=j+1, padx=2, pady=2)
-                frame_cell.grid_propagate(False)
-                
-                label = tk.Label(frame_cell, text=f"P{priority}", bg=colors[priority], 
-                               fg='white', font=('Arial', 10, 'bold'))
-                label.place(relx=0.5, rely=0.3, anchor=tk.CENTER)
-                
-                count_label = tk.Label(frame_cell, text="0", bg=colors[priority], 
-                                     fg='white', font=('Arial', 8))
-                count_label.place(relx=0.5, rely=0.7, anchor=tk.CENTER)
-                
-                self.matriz_labels[(row, j)] = count_label
-        
-        # Legenda
-        frame_legenda = ttk.Frame(frame_matriz)
-        frame_legenda.grid(row=7, column=0, columnspan=4, pady=(10, 0))
-        
-        legenda_items = [
-            ("P1-P2: Prioridade Máxima/Alta", '#e74c3c'),
-            ("P3-P4: Prioridade Média-Alta", '#f39c12'),
-            ("P5-P7: Prioridade Média", '#f1c40f'),
-            ("P6-P8-P9: Prioridade Baixa", '#95a5a6')
-        ]
-        
-        for i, (text, color) in enumerate(legenda_items):
-            frame_item = tk.Frame(frame_legenda, bg=color, width=15, height=15)
-            frame_item.grid(row=i//2, column=(i%2)*2, padx=5, pady=2, sticky=tk.W)
-            frame_item.grid_propagate(False)
-            
-            ttk.Label(frame_legenda, text=text, font=('Arial', 8)).grid(row=i//2, column=(i%2)*2+1, padx=(5, 20), pady=2, sticky=tk.W)
-    
     def calcular_prioridade(self, impacto: str, dificuldade: str) -> int:
         """Calcula a prioridade baseada no impacto e dificuldade"""
         matriz_prioridade = {
@@ -237,303 +80,318 @@ class TRLMatrixSystem:
         }
         return matriz_prioridade.get((impacto, dificuldade), 9)
     
-    def atualizar_lista_projetos(self):
-        """Atualiza a lista de projetos na interface"""
-        # Limpar tree
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        
-        # Adicionar projetos filtrados
-        projetos_ordenados = sorted(self.projetos_filtrados, 
-                                  key=lambda x: (self.calcular_prioridade(x['impacto'], x['dificuldade']), -x['peso']))
-        
-        for projeto in projetos_ordenados:
-            prioridade = self.calcular_prioridade(projeto['impacto'], projeto['dificuldade'])
-            self.tree.insert('', 'end', text=projeto['nome'], 
-                           values=(projeto['trl'], projeto['impacto'], projeto['dificuldade'], 
-                                 projeto['peso'], f"P{prioridade}"))
-        
-        self.atualizar_matriz_contadores()
-        self.atualizar_estatisticas()
+    def criar_dataframe(self, projetos_filtrados=None):
+        """Cria DataFrame dos projetos"""
+        if projetos_filtrados is None:
+            projetos = st.session_state.projetos
+        else:
+            projetos = projetos_filtrados
+            
+        df = pd.DataFrame(projetos)
+        if not df.empty:
+            df['prioridade'] = df.apply(lambda x: self.calcular_prioridade(x['impacto'], x['dificuldade']), axis=1)
+            df = df.sort_values(['prioridade', 'peso'], ascending=[True, False])
+        return df
     
-    def atualizar_matriz_contadores(self):
-        """Atualiza os contadores na matriz visual"""
-        # Resetar contadores
-        contadores = {('ALTO', 0): 0, ('ALTO', 1): 0, ('ALTO', 2): 0,
-                     ('MÉDIO', 0): 0, ('MÉDIO', 1): 0, ('MÉDIO', 2): 0,
-                     ('BAIXO', 0): 0, ('BAIXO', 1): 0, ('BAIXO', 2): 0}
+    def criar_matriz_visual(self, df):
+        """Cria a matriz visual de priorização"""
+        # Preparar dados para a matriz - ordenar impactos de baixo para alto
+        impactos = ['Baixo', 'Médio', 'Alto']  # Invertido para ter Alto no topo
+        dificuldades = ['Fácil', 'Moderada', 'Difícil']
         
         # Contar projetos por categoria
-        for projeto in self.projetos_filtrados:
-            impacto = projeto['impacto'].upper()
-            dificuldade_map = {'Fácil': 0, 'Moderada': 1, 'Difícil': 2}
-            dificuldade_idx = dificuldade_map.get(projeto['dificuldade'], 2)
-            
-            key = (impacto, dificuldade_idx)
-            if key in contadores:
-                contadores[key] += 1
+        matriz_contagem = np.zeros((3, 3))
+        matriz_labels = []
         
-        # Atualizar labels
-        for key, count in contadores.items():
-            if key in self.matriz_labels:
-                self.matriz_labels[key].config(text=str(count))
+        for i, impacto in enumerate(impactos):
+            row_labels = []
+            for j, dificuldade in enumerate(dificuldades):
+                count = len(df[(df['impacto'] == impacto) & (df['dificuldade'] == dificuldade)])
+                matriz_contagem[i][j] = count
+                prioridade = self.calcular_prioridade(impacto, dificuldade)
+                row_labels.append(f"P{prioridade}<br>{count} projetos")
+            matriz_labels.append(row_labels)
+        
+        # Criar heatmap
+        fig = go.Figure(data=go.Heatmap(
+            z=matriz_contagem,
+            x=dificuldades,
+            y=impactos,
+            text=matriz_labels,
+            texttemplate="%{text}",
+            textfont={"size": 12, "color": "white"},
+            colorscale=[[0, '#95a5a6'], [0.3, '#f1c40f'], [0.6, '#f39c12'], [1, '#e74c3c']],
+            showscale=False,
+            hoverongaps=False
+        ))
+        
+        fig.update_layout(
+            title={
+                'text': "Matriz de Priorização TRL<br><sub>Impacto vs Dificuldade da Próxima Transição</sub>",
+                'x': 0.5,
+                'font': {'size': 16, 'color': '#2c3e50'}
+            },
+            xaxis_title="Dificuldade da Próxima Transição TRL",
+            yaxis_title="Impacto Potencial",
+            font=dict(size=12),
+            height=400,
+            plot_bgcolor='white'
+        )
+        
+        return fig
     
-    def atualizar_estatisticas(self):
-        """Atualiza as estatísticas dos projetos"""
-        # Limpar frame de estatísticas
-        for widget in self.frame_stats.winfo_children():
-            widget.destroy()
+    def criar_dashboard_analytics(self, df):
+        """Cria gráficos de análise dos dados"""
+        col1, col2 = st.columns(2)
         
-        total_projetos = len(self.projetos_filtrados)
-        if total_projetos == 0:
-            ttk.Label(self.frame_stats, text="Nenhum projeto encontrado").grid(row=0, column=0)
-            return
+        with col1:
+            # Gráfico de distribuição por prioridade
+            prioridade_counts = df['prioridade'].value_counts().sort_index()
+            fig_prioridade = px.bar(
+                x=[f"P{p}" for p in prioridade_counts.index],
+                y=prioridade_counts.values,
+                title="Distribuição por Prioridade",
+                color=prioridade_counts.values,
+                color_continuous_scale=['#95a5a6', '#f1c40f', '#f39c12', '#e74c3c']
+            )
+            fig_prioridade.update_layout(showlegend=False, xaxis_title="Prioridade", yaxis_title="Quantidade")
+            st.plotly_chart(fig_prioridade, use_container_width=True)
         
-        # Contar por prioridade
-        prioridades = {}
-        for projeto in self.projetos_filtrados:
-            prioridade = self.calcular_prioridade(projeto['impacto'], projeto['dificuldade'])
-            prioridades[prioridade] = prioridades.get(prioridade, 0) + 1
+        with col2:
+            # Gráfico de distribuição por TRL
+            trl_counts = df['trl'].value_counts().sort_index()
+            fig_trl = px.bar(
+                x=[f"TRL {t}" for t in trl_counts.index],
+                y=trl_counts.values,
+                title="Distribuição por TRL",
+                color=trl_counts.values,
+                color_continuous_scale="Blues"
+            )
+            fig_trl.update_layout(showlegend=False, xaxis_title="TRL", yaxis_title="Quantidade")
+            st.plotly_chart(fig_trl, use_container_width=True)
         
-        # Contar por TRL
-        trls = {}
-        for projeto in self.projetos_filtrados:
-            trl = projeto['trl']
-            trls[trl] = trls.get(trl, 0) + 1
-        
-        # Exibir estatísticas
-        ttk.Label(self.frame_stats, text=f"Total de Projetos: {total_projetos}", 
-                 font=('Arial', 10, 'bold')).grid(row=0, column=0, columnspan=2, sticky=tk.W)
-        
-        # Prioridades
-        ttk.Label(self.frame_stats, text="Por Prioridade:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
-        for i, (prioridade, count) in enumerate(sorted(prioridades.items())):
-            ttk.Label(self.frame_stats, text=f"P{prioridade}: {count}").grid(row=2+i//3, column=i%3, sticky=tk.W, padx=(0, 10))
-        
-        # TRLs mais comuns
-        ttk.Label(self.frame_stats, text="TRLs mais comuns:", font=('Arial', 9, 'bold')).grid(row=5, column=0, sticky=tk.W, pady=(10, 0))
-        trls_ordenados = sorted(trls.items(), key=lambda x: x[1], reverse=True)[:5]
-        for i, (trl, count) in enumerate(trls_ordenados):
-            ttk.Label(self.frame_stats, text=f"TRL {trl}: {count}").grid(row=6+i//3, column=i%3, sticky=tk.W, padx=(0, 10))
+        # Scatter plot: Peso vs TRL colorido por prioridade
+        fig_scatter = px.scatter(
+            df, x='trl', y='peso', color='prioridade',
+            hover_data=['nome', 'impacto', 'dificuldade'],
+            title="Relação TRL vs Peso (Colorido por Prioridade)",
+            color_continuous_scale=['#95a5a6', '#f1c40f', '#f39c12', '#e74c3c']
+        )
+        fig_scatter.update_layout(height=400)
+        st.plotly_chart(fig_scatter, use_container_width=True)
     
-    def adicionar_projeto(self):
-        """Adiciona um novo projeto"""
-        dialog = ProjetoDialog(self.root, "Adicionar Projeto")
-        self.root.wait_window(dialog.dialog)
+    def exportar_dados(self, df):
+        """Funcionalidades de exportação"""
+        col1, col2, col3 = st.columns(3)
         
-        if dialog.resultado:
-            self.projetos.append(dialog.resultado)
-            self.aplicar_filtros()
-    
-    def editar_projeto(self):
-        """Edita o projeto selecionado"""
-        selection = self.tree.selection()
-        if not selection:
-            messagebox.showwarning("Aviso", "Selecione um projeto para editar.")
-            return
+        with col1:
+            # Exportar CSV
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Exportar CSV",
+                data=csv,
+                file_name="projetos_trl.csv",
+                mime="text/csv"
+            )
         
-        # Encontrar projeto pelo nome
-        nome_projeto = self.tree.item(selection[0])['text']
-        projeto = next((p for p in self.projetos if p['nome'] == nome_projeto), None)
+        with col2:
+            # Exportar JSON
+            json_data = df.to_json(orient='records', indent=2)
+            st.download_button(
+                label="📥 Exportar JSON",
+                data=json_data,
+                file_name="projetos_trl.json",
+                mime="application/json"
+            )
         
-        if projeto:
-            dialog = ProjetoDialog(self.root, "Editar Projeto", projeto)
-            self.root.wait_window(dialog.dialog)
-            
-            if dialog.resultado:
-                # Atualizar projeto
-                projeto.update(dialog.resultado)
-                self.aplicar_filtros()
-    
-    def excluir_projeto(self):
-        """Exclui o projeto selecionado"""
-        selection = self.tree.selection()
-        if not selection:
-            messagebox.showwarning("Aviso", "Selecione um projeto para excluir.")
-            return
-        
-        nome_projeto = self.tree.item(selection[0])['text']
-        
-        if messagebox.askyesno("Confirmar", f"Deseja realmente excluir o projeto '{nome_projeto}'?"):
-            self.projetos = [p for p in self.projetos if p['nome'] != nome_projeto]
-            self.aplicar_filtros()
-    
-    def aplicar_filtros(self, event=None):
-        """Aplica os filtros selecionados"""
-        filtro_trl = self.filtro_trl.get()
-        filtro_impacto = self.filtro_impacto.get()
-        
-        self.projetos_filtrados = []
-        for projeto in self.projetos:
-            # Filtro TRL
-            if filtro_trl != 'Todos' and str(projeto['trl']) != filtro_trl:
-                continue
-            
-            # Filtro Impacto
-            if filtro_impacto != 'Todos' and projeto['impacto'] != filtro_impacto:
-                continue
-            
-            self.projetos_filtrados.append(projeto)
-        
-        self.atualizar_lista_projetos()
-    
-    def limpar_filtros(self):
-        """Remove todos os filtros"""
-        self.filtro_trl.set('Todos')
-        self.filtro_impacto.set('Todos')
-        self.projetos_filtrados = self.projetos.copy()
-        self.atualizar_lista_projetos()
-    
-    def salvar_dados(self):
-        """Salva os dados em arquivo JSON"""
-        try:
-            with open('projetos_trl.json', 'w', encoding='utf-8') as f:
-                json.dump(self.projetos, f, indent=2, ensure_ascii=False)
-            messagebox.showinfo("Sucesso", "Dados salvos com sucesso!")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao salvar dados: {str(e)}")
-    
-    def carregar_dados(self):
-        """Carrega os dados de arquivo JSON"""
-        try:
-            if os.path.exists('projetos_trl.json'):
-                with open('projetos_trl.json', 'r', encoding='utf-8') as f:
-                    self.projetos = json.load(f)
-                self.aplicar_filtros()
-                messagebox.showinfo("Sucesso", "Dados carregados com sucesso!")
-            else:
-                messagebox.showwarning("Aviso", "Arquivo de dados não encontrado.")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao carregar dados: {str(e)}")
-
-class ProjetoDialog:
-    def __init__(self, parent, titulo, projeto=None):
-        self.resultado = None
-        
-        # Criar dialog
-        self.dialog = tk.Toplevel(parent)
-        self.dialog.title(titulo)
-        self.dialog.geometry("400x300")
-        self.dialog.transient(parent)
-        self.dialog.grab_set()
-        
-        # Centralizar dialog
-        self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
-        
-        # Frame principal
-        main_frame = ttk.Frame(self.dialog, padding="20")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Campos
-        ttk.Label(main_frame, text="Nome do Projeto:").grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
-        self.entry_nome = ttk.Entry(main_frame, width=40)
-        self.entry_nome.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        ttk.Label(main_frame, text="TRL (1-9):").grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
-        self.combo_trl = ttk.Combobox(main_frame, values=[str(i) for i in range(1, 10)], width=10)
-        self.combo_trl.grid(row=3, column=0, sticky=tk.W, pady=(0, 10))
-        
-        ttk.Label(main_frame, text="Impacto:").grid(row=4, column=0, sticky=tk.W, pady=(0, 5))
-        self.combo_impacto = ttk.Combobox(main_frame, values=['Alto', 'Médio', 'Baixo'], width=15)
-        self.combo_impacto.grid(row=5, column=0, sticky=tk.W, pady=(0, 10))
-        
-        ttk.Label(main_frame, text="Dificuldade:").grid(row=6, column=0, sticky=tk.W, pady=(0, 5))
-        self.combo_dificuldade = ttk.Combobox(main_frame, values=['Fácil', 'Moderada', 'Difícil'], width=15)
-        self.combo_dificuldade.grid(row=7, column=0, sticky=tk.W, pady=(0, 10))
-        
-        ttk.Label(main_frame, text="Peso (0-10):").grid(row=8, column=0, sticky=tk.W, pady=(0, 5))
-        self.entry_peso = ttk.Entry(main_frame, width=10)
-        self.entry_peso.grid(row=9, column=0, sticky=tk.W, pady=(0, 20))
-        
-        # Botões
-        frame_botoes = ttk.Frame(main_frame)
-        frame_botoes.grid(row=10, column=0, columnspan=2, pady=(10, 0))
-        
-        ttk.Button(frame_botoes, text="Salvar", command=self.salvar).grid(row=0, column=0, padx=(0, 10))
-        ttk.Button(frame_botoes, text="Cancelar", command=self.cancelar).grid(row=0, column=1)
-        
-        # Preencher campos se for edição
-        if projeto:
-            self.entry_nome.insert(0, projeto['nome'])
-            self.combo_trl.set(str(projeto['trl']))
-            self.combo_impacto.set(projeto['impacto'])
-            self.combo_dificuldade.set(projeto['dificuldade'])
-            self.entry_peso.insert(0, str(projeto['peso']))
-        else:
-            # Valores padrão
-            self.combo_trl.set('1')
-            self.combo_impacto.set('Médio')
-            self.combo_dificuldade.set('Moderada')
-            self.entry_peso.insert(0, '1')
-        
-        # Focar no campo nome
-        self.entry_nome.focus()
-        
-        # Configurar grid
-        main_frame.columnconfigure(0, weight=1)
-        self.dialog.columnconfigure(0, weight=1)
-        self.dialog.rowconfigure(0, weight=1)
-    
-    def salvar(self):
-        """Salva os dados do projeto"""
-        try:
-            nome = self.entry_nome.get().strip()
-            if not nome:
-                messagebox.showerror("Erro", "Nome do projeto é obrigatório!")
-                return
-            
-            trl = int(self.combo_trl.get())
-            if not (1 <= trl <= 9):
-                messagebox.showerror("Erro", "TRL deve estar entre 1 e 9!")
-                return
-            
-            impacto = self.combo_impacto.get()
-            if impacto not in ['Alto', 'Médio', 'Baixo']:
-                messagebox.showerror("Erro", "Selecione um impacto válido!")
-                return
-            
-            dificuldade = self.combo_dificuldade.get()
-            if dificuldade not in ['Fácil', 'Moderada', 'Difícil']:
-                messagebox.showerror("Erro", "Selecione uma dificuldade válida!")
-                return
-            
-            peso = int(self.entry_peso.get())
-            if not (0 <= peso <= 10):
-                messagebox.showerror("Erro", "Peso deve estar entre 0 e 10!")
-                return
-            
-            self.resultado = {
-                'nome': nome,
-                'trl': trl,
-                'impacto': impacto,
-                'dificuldade': dificuldade,
-                'peso': peso
-            }
-            
-            self.dialog.destroy()
-            
-        except ValueError:
-            messagebox.showerror("Erro", "Valores numéricos inválidos!")
-    
-    def cancelar(self):
-        """Cancela a operação"""
-        self.dialog.destroy()
+        with col3:
+            # Salvar no session_state
+            if st.button("💾 Salvar Alterações"):
+                st.session_state.projetos = df.drop('prioridade', axis=1).to_dict('records')
+                st.success("Dados salvos!")
 
 def main():
-    """Função principal para executar o sistema"""
-    root = tk.Tk()
-    app = TRLMatrixSystem(root)
+    # Header
+    st.title("🎯 Sistema de Priorização TRL")
+    st.markdown("**Sistema estratégico para priorização de projetos de inovação considerando impacto potencial e dificuldade de transição TRL**")
+    st.divider()
     
-    # Configurar comportamento de fechamento
-    def on_closing():
-        if messagebox.askokcancel("Sair", "Deseja salvar os dados antes de sair?"):
-            app.salvar_dados()
-        root.destroy()
+    # Inicializar sistema
+    sistema = TRLMatrixSystem()
     
-    root.protocol("WM_DELETE_WINDOW", on_closing)
+    # Sidebar - Filtros e Gestão
+    with st.sidebar:
+        st.header("🔧 Controles")
+        
+        # Filtros
+        st.subheader("🔍 Filtros")
+        filtro_trl = st.selectbox("TRL:", ['Todos'] + [str(i) for i in range(1, 10)])
+        filtro_impacto = st.selectbox("Impacto:", ['Todos', 'Alto', 'Médio', 'Baixo'])
+        filtro_dificuldade = st.selectbox("Dificuldade:", ['Todos', 'Fácil', 'Moderada', 'Difícil'])
+        
+        # Gestão de Projetos
+        st.subheader("➕ Adicionar Projeto")
+        with st.form("novo_projeto"):
+            nome = st.text_input("Nome do Projeto:")
+            col1, col2 = st.columns(2)
+            with col1:
+                trl = st.selectbox("TRL:", range(1, 10), key="new_trl")
+                impacto = st.selectbox("Impacto:", ['Alto', 'Médio', 'Baixo'], key="new_impacto")
+            with col2:
+                dificuldade = st.selectbox("Dificuldade:", ['Fácil', 'Moderada', 'Difícil'], key="new_dificuldade")
+                peso = st.slider("Peso:", 0, 10, 1, key="new_peso")
+            
+            if st.form_submit_button("➕ Adicionar"):
+                if nome.strip():
+                    novo_projeto = {
+                        'nome': nome.strip(),
+                        'trl': trl,
+                        'impacto': impacto,
+                        'dificuldade': dificuldade,
+                        'peso': peso
+                    }
+                    st.session_state.projetos.append(novo_projeto)
+                    st.success(f"Projeto '{nome}' adicionado!")
+                else:
+                    st.error("Nome do projeto é obrigatório!")
+        
+        # Reset dados
+        if st.button("🔄 Resetar Dados"):
+            st.session_state.projetos = sistema.carregar_projetos_iniciais()
+            st.success("Dados resetados!")
     
-    # Executar aplicação
-    root.mainloop()
+    # Aplicar filtros
+    df = sistema.criar_dataframe()
+    df_filtrado = df.copy()
+    
+    if filtro_trl != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['trl'] == int(filtro_trl)]
+    if filtro_impacto != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['impacto'] == filtro_impacto]
+    if filtro_dificuldade != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['dificuldade'] == filtro_dificuldade]
+    
+    # Layout principal
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🗂️ Lista de Projetos", "📈 Analytics", "⚙️ Gestão"])
+    
+    with tab1:
+        # Métricas
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total de Projetos", len(df_filtrado))
+        with col2:
+            prioridade_alta = len(df_filtrado[df_filtrado['prioridade'].isin([1, 2])])
+            st.metric("Prioridade Alta (P1-P2)", prioridade_alta)
+        with col3:
+            trl_baixo = len(df_filtrado[df_filtrado['trl'] <= 3])
+            st.metric("TRL Baixo (1-3)", trl_baixo)
+        with col4:
+            peso_medio = df_filtrado['peso'].mean() if not df_filtrado.empty else 0
+            st.metric("Peso Médio", f"{peso_medio:.1f}")
+        
+        st.markdown("---")
+        
+        # Matriz de Priorização
+        if not df_filtrado.empty:
+            fig_matriz = sistema.criar_matriz_visual(df_filtrado)
+            st.plotly_chart(fig_matriz, use_container_width=True)
+            
+            # Legenda
+            st.markdown("""
+            **🔴 P1-P2: Prioridade Máxima/Alta** - Projetos com maior potencial de retorno e menor risco técnico  
+            **🟡 P3-P4: Prioridade Média-Alta** - Projetos promissores que requerem análise mais detalhada  
+            **🟢 P5-P7: Prioridade Média** - Projetos para preenchimento de capacidade ociosa  
+            **⚫ P6-P8-P9: Prioridade Baixa** - Candidatos para reavaliação ou descontinuação
+            """)
+        else:
+            st.warning("Nenhum projeto encontrado com os filtros aplicados.")
+    
+    with tab2:
+        # Lista de Projetos
+        st.subheader("Lista de Projetos")
+        
+        if not df_filtrado.empty:
+            # Opções de visualização
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                mostrar_apenas_alta_prioridade = st.checkbox("Apenas Alta Prioridade (P1-P3)")
+            
+            if mostrar_apenas_alta_prioridade:
+                df_exibir = df_filtrado[df_filtrado['prioridade'] <= 3]
+            else:
+                df_exibir = df_filtrado
+            
+            # Exibir projetos em formato de tabela editável
+            if len(df_exibir) > 0:
+                st.dataframe(
+                    df_exibir,
+                    column_config={
+                        "nome": st.column_config.TextColumn("Nome", width="large"),
+                        "trl": st.column_config.NumberColumn("TRL", min_value=1, max_value=9),
+                        "impacto": st.column_config.TextColumn("Impacto"),
+                        "dificuldade": st.column_config.TextColumn("Dificuldade"),
+                        "peso": st.column_config.NumberColumn("Peso", min_value=0, max_value=10),
+                        "prioridade": st.column_config.NumberColumn("Prioridade")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+            else:
+                st.info("Nenhum projeto encontrado com os critérios selecionados.")
+        else:
+            st.info("Nenhum projeto encontrado com os filtros aplicados.")
+    
+    with tab3:
+        # Analytics
+        st.subheader("Análises dos Projetos")
+        if not df_filtrado.empty:
+            sistema.criar_dashboard_analytics(df_filtrado)
+            
+            # Tabela de top projetos por prioridade
+            st.subheader("🏆 Top 10 Projetos por Prioridade")
+            top_projetos = df_filtrado.head(10)[['nome', 'prioridade', 'trl', 'impacto', 'dificuldade', 'peso']]
+            st.dataframe(top_projetos, hide_index=True, use_container_width=True)
+        else:
+            st.info("Nenhum dado disponível para análise com os filtros aplicados.")
+    
+    with tab4:
+        # Gestão
+        st.subheader("Gestão de Projetos")
+        
+        # Exportar dados
+        st.subheader("📤 Exportar Dados")
+        sistema.exportar_dados(df_filtrado)
+        
+        st.markdown("---")
+        
+        # Importar dados
+        st.subheader("📥 Importar Dados")
+        uploaded_file = st.file_uploader("Carregar arquivo JSON", type=['json'])
+        if uploaded_file is not None:
+            try:
+                dados_importados = json.load(uploaded_file)
+                if st.button("Confirmar Importação"):
+                    st.session_state.projetos = dados_importados
+                    st.success("Dados importados com sucesso!")
+            except Exception as e:
+                st.error(f"Erro ao importar dados: {str(e)}")
+        
+        st.markdown("---")
+        
+        # Excluir projetos
+        st.subheader("🗑️ Excluir Projetos")
+        if df_filtrado.empty:
+            st.info("Nenhum projeto disponível para exclusão.")
+        else:
+            projeto_para_excluir = st.selectbox(
+                "Selecione um projeto para excluir:",
+                options=[''] + df_filtrado['nome'].tolist()
+            )
+            
+            if projeto_para_excluir:
+                if st.button(f"🗑️ Excluir '{projeto_para_excluir}'", type="secondary"):
+                    st.session_state.projetos = [p for p in st.session_state.projetos if p['nome'] != projeto_para_excluir]
+                    st.success(f"Projeto '{projeto_para_excluir}' excluído!")
 
 if __name__ == "__main__":
     main()
