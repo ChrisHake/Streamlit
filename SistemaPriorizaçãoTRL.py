@@ -97,7 +97,7 @@ class TRLMatrixSystem:
         """Cria a matriz visual de priorização"""
         # Preparar dados para a matriz - ordenar impactos de baixo para alto
         impactos = ['Baixo', 'Médio', 'Alto']  # Invertido para ter Alto no topo
-        dificuldades = ['Fácil', 'Moderada', 'Difícil']
+        dificuldades = ['Difícil', 'Moderada', 'Fácil']  # Invertido: Difícil próximo à origem, Fácil no extremo
         
         # Contar projetos por categoria
         matriz_contagem = np.zeros((3, 3))
@@ -255,8 +255,78 @@ def main():
                 else:
                     st.error("Nome do projeto é obrigatório!")
         
+        # Upload de arquivos
+        st.subheader("📥 Importar Projetos")
+        uploaded_file = st.file_uploader("Carregar arquivo", type=['json', 'csv'])
+        if uploaded_file is not None:
+            try:
+                if uploaded_file.name.endswith('.json'):
+                    dados_importados = json.load(uploaded_file)
+                    # Validar estrutura dos dados
+                    if isinstance(dados_importados, list) and all(
+                        isinstance(item, dict) and 
+                        all(key in item for key in ['nome', 'trl', 'impacto', 'dificuldade', 'peso'])
+                        for item in dados_importados
+                    ):
+                        if st.button("✅ Confirmar Importação JSON"):
+                            st.session_state.projetos = dados_importados
+                            st.success(f"✅ {len(dados_importados)} projetos importados com sucesso!")
+                    else:
+                        st.error("❌ Formato JSON inválido. Verifique se possui os campos: nome, trl, impacto, dificuldade, peso")
+                
+                elif uploaded_file.name.endswith('.csv'):
+                    df_importado = pd.read_csv(uploaded_file)
+                    # Validar colunas necessárias
+                    colunas_necessarias = ['nome', 'trl', 'impacto', 'dificuldade', 'peso']
+                    if all(col in df_importado.columns for col in colunas_necessarias):
+                        # Validar valores
+                        if (df_importado['impacto'].isin(['Alto', 'Médio', 'Baixo']).all() and
+                            df_importado['dificuldade'].isin(['Fácil', 'Moderada', 'Difícil']).all() and
+                            df_importado['trl'].between(1, 9).all() and
+                            df_importado['peso'].between(0, 10).all()):
+                            
+                            dados_importados = df_importado[colunas_necessarias].to_dict('records')
+                            st.dataframe(df_importado.head(), use_container_width=True)
+                            
+                            if st.button("✅ Confirmar Importação CSV"):
+                                st.session_state.projetos = dados_importados
+                                st.success(f"✅ {len(dados_importados)} projetos importados com sucesso!")
+                        else:
+                            st.error("❌ Valores inválidos no CSV. Verifique: TRL (1-9), Peso (0-10), Impacto (Alto/Médio/Baixo), Dificuldade (Fácil/Moderada/Difícil)")
+                    else:
+                        st.error(f"❌ CSV deve conter as colunas: {', '.join(colunas_necessarias)}")
+                        
+            except Exception as e:
+                st.error(f"❌ Erro ao processar arquivo: {str(e)}")
+        
+        # Download de arquivos
+        st.subheader("📤 Exportar Projetos")
+        df_export = sistema.criar_dataframe()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            # Download JSON
+            json_data = json.dumps(st.session_state.projetos, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="📥 Download JSON",
+                data=json_data,
+                file_name="projetos_trl.json",
+                mime="application/json"
+            )
+        
+        with col2:
+            # Download CSV
+            csv_data = df_export.drop('prioridade', axis=1).to_csv(index=False)
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv_data,
+                file_name="projetos_trl.csv",
+                mime="text/csv"
+            )
+        
         # Reset dados
-        if st.button("🔄 Resetar Dados"):
+        st.subheader("🔄 Resetar Sistema")
+        if st.button("🔄 Resetar para Dados Iniciais"):
             st.session_state.projetos = sistema.carregar_projetos_iniciais()
             st.success("Dados resetados!")
     
@@ -358,23 +428,57 @@ def main():
         # Gestão
         st.subheader("Gestão de Projetos")
         
-        # Exportar dados
-        st.subheader("📤 Exportar Dados")
+        # Visualizar dados atuais
+        st.subheader("📊 Dados Atuais")
+        total_projetos = len(st.session_state.projetos)
+        st.info(f"📈 Total de projetos carregados: **{total_projetos}**")
+        
+        # Exportar dados (mantém funcionalidade da aba de gestão)
+        st.subheader("📤 Exportar Dados Filtrados")
         sistema.exportar_dados(df_filtrado)
         
         st.markdown("---")
         
-        # Importar dados
-        st.subheader("📥 Importar Dados")
-        uploaded_file = st.file_uploader("Carregar arquivo JSON", type=['json'])
-        if uploaded_file is not None:
-            try:
-                dados_importados = json.load(uploaded_file)
-                if st.button("Confirmar Importação"):
-                    st.session_state.projetos = dados_importados
-                    st.success("Dados importados com sucesso!")
-            except Exception as e:
-                st.error(f"Erro ao importar dados: {str(e)}")
+        # Editar projeto existente
+        st.subheader("✏️ Editar Projeto")
+        if not df_filtrado.empty:
+            projeto_para_editar = st.selectbox(
+                "Selecione um projeto para editar:",
+                options=[''] + df_filtrado['nome'].tolist()
+            )
+            
+            if projeto_para_editar:
+                # Encontrar o projeto
+                projeto_atual = next((p for p in st.session_state.projetos if p['nome'] == projeto_para_editar), None)
+                
+                if projeto_atual:
+                    with st.form("editar_projeto"):
+                        st.write(f"**Editando:** {projeto_para_editar}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            novo_trl = st.selectbox("TRL:", range(1, 10), index=projeto_atual['trl']-1, key="edit_trl")
+                            novo_impacto = st.selectbox("Impacto:", ['Alto', 'Médio', 'Baixo'], 
+                                                      index=['Alto', 'Médio', 'Baixo'].index(projeto_atual['impacto']), key="edit_impacto")
+                        with col2:
+                            nova_dificuldade = st.selectbox("Dificuldade:", ['Fácil', 'Moderada', 'Difícil'], 
+                                                          index=['Fácil', 'Moderada', 'Difícil'].index(projeto_atual['dificuldade']), key="edit_dificuldade")
+                            novo_peso = st.slider("Peso:", 0, 10, projeto_atual['peso'], key="edit_peso")
+                        
+                        if st.form_submit_button("💾 Salvar Alterações"):
+                            # Atualizar o projeto
+                            for i, p in enumerate(st.session_state.projetos):
+                                if p['nome'] == projeto_para_editar:
+                                    st.session_state.projetos[i].update({
+                                        'trl': novo_trl,
+                                        'impacto': novo_impacto,
+                                        'dificuldade': nova_dificuldade,
+                                        'peso': novo_peso
+                                    })
+                                    break
+                            st.success(f"✅ Projeto '{projeto_para_editar}' atualizado!")
+        else:
+            st.info("Nenhum projeto disponível para edição.")
         
         st.markdown("---")
         
@@ -391,7 +495,7 @@ def main():
             if projeto_para_excluir:
                 if st.button(f"🗑️ Excluir '{projeto_para_excluir}'", type="secondary"):
                     st.session_state.projetos = [p for p in st.session_state.projetos if p['nome'] != projeto_para_excluir]
-                    st.success(f"Projeto '{projeto_para_excluir}' excluído!")
+                    st.success(f"✅ Projeto '{projeto_para_excluir}' excluído!")
 
 if __name__ == "__main__":
     main()
